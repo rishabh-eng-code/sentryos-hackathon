@@ -56,19 +56,35 @@ npx shadcn@latest add [component-name]
 
 ## Sentry Integration
 
-This template is designed to work seamlessly with Sentry monitoring. To add Sentry to your project:
+✅ **Sentry is fully configured and ready to use!**
 
-```bash
-npx @sentry/wizard@latest -i nextjs
-```
+This project includes:
+- Error tracking for client, server, and edge runtimes
+- Performance monitoring with distributed tracing
+- Session Replay for debugging user sessions
+- Automatic instrumentation for Next.js
 
-The wizard will guide you through:
-- Creating a Sentry account (if needed)
-- Setting up your project
-- Configuring error tracking and performance monitoring
-- Adding the necessary configuration files
+### Configuration
 
-For manual setup, check out the [Sentry Next.js documentation](https://docs.sentry.io/platforms/javascript/guides/nextjs/).
+1. Create a `.env.local` file based on `.env.local.example`:
+   ```bash
+   cp .env.local.example .env.local
+   ```
+
+2. Add your Sentry credentials to `.env.local`:
+   - **NEXT_PUBLIC_SENTRY_DSN**: Get from [Sentry Project Settings → Client Keys (DSN)](https://sentry.io/settings/projects/)
+   - **SENTRY_ORG**: Your Sentry organization slug
+   - **SENTRY_PROJECT**: Your Sentry project slug
+   - **SENTRY_AUTH_TOKEN**: Create at [Sentry Account → API → Auth Tokens](https://sentry.io/settings/account/api/auth-tokens/) with scopes: `project:releases`, `org:read`
+
+3. Start your development server:
+   ```bash
+   npm run dev
+   ```
+
+Sentry will now automatically capture errors, performance data, and user sessions!
+
+For more information, check out the [Sentry Next.js documentation](https://docs.sentry.io/platforms/javascript/guides/nextjs/).
 
 ## Color Scheme
 
