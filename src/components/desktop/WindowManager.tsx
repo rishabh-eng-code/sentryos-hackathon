@@ -2,6 +2,7 @@
 
 import { useState, useCallback, createContext, useContext, ReactNode } from 'react'
 import { WindowState } from './types'
+import * as Sentry from '@sentry/nextjs'
 
 interface WindowManagerContextType {
   windows: WindowState[]
@@ -37,18 +38,44 @@ export function WindowManagerProvider({ children }: { children: ReactNode }) {
         const existing = prev.find(w => w.id === window.id)
         if (existing) {
           if (existing.isMinimized) {
+            Sentry.metrics.increment('window.restored', 1, {
+              tags: { window_type: window.id }
+            })
+            Sentry.logger.debug('Window restored from minimized', {
+              context: { windowId: window.id, windowTitle: window.title }
+            })
+
             return prev.map(w =>
               w.id === window.id
                 ? { ...w, isMinimized: false, isFocused: true, zIndex: newZ }
                 : { ...w, isFocused: false }
             )
           }
+
+          Sentry.logger.debug('Window focused', {
+            context: { windowId: window.id, windowTitle: window.title }
+          })
+
           return prev.map(w =>
             w.id === window.id
               ? { ...w, isFocused: true, zIndex: newZ }
               : { ...w, isFocused: false }
           )
         }
+
+        Sentry.metrics.increment('window.opened', 1, {
+          tags: { window_type: window.id }
+        })
+        Sentry.metrics.gauge('window.total_count', prev.length + 1)
+
+        Sentry.logger.info('New window opened', {
+          context: {
+            windowId: window.id,
+            windowTitle: window.title,
+            totalWindows: prev.length + 1
+          }
+        })
+
         return [
           ...prev.map(w => ({ ...w, isFocused: false })),
           { ...window, zIndex: newZ, isFocused: true }
@@ -59,19 +86,67 @@ export function WindowManagerProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const closeWindow = useCallback((id: string) => {
-    setWindows(prev => prev.filter(w => w.id !== id))
+    setWindows(prev => {
+      const window = prev.find(w => w.id === id)
+      if (window) {
+        Sentry.metrics.increment('window.closed', 1, {
+          tags: { window_type: id }
+        })
+        Sentry.metrics.gauge('window.total_count', prev.length - 1)
+
+        Sentry.logger.info('Window closed', {
+          context: {
+            windowId: id,
+            windowTitle: window.title,
+            totalWindows: prev.length - 1
+          }
+        })
+      }
+
+      return prev.filter(w => w.id !== id)
+    })
   }, [])
 
   const minimizeWindow = useCallback((id: string) => {
-    setWindows(prev => prev.map(w =>
-      w.id === id ? { ...w, isMinimized: true, isFocused: false } : w
-    ))
+    setWindows(prev => {
+      const window = prev.find(w => w.id === id)
+      if (window) {
+        Sentry.metrics.increment('window.minimized', 1, {
+          tags: { window_type: id }
+        })
+        Sentry.logger.debug('Window minimized', {
+          context: { windowId: id, windowTitle: window.title }
+        })
+      }
+
+      return prev.map(w =>
+        w.id === id ? { ...w, isMinimized: true, isFocused: false } : w
+      )
+    })
   }, [])
 
   const maximizeWindow = useCallback((id: string) => {
-    setWindows(prev => prev.map(w =>
-      w.id === id ? { ...w, isMaximized: !w.isMaximized } : w
-    ))
+    setWindows(prev => {
+      const window = prev.find(w => w.id === id)
+      if (window) {
+        const isMaximizing = !window.isMaximized
+
+        Sentry.metrics.increment('window.maximize_toggled', 1, {
+          tags: { window_type: id, action: isMaximizing ? 'maximize' : 'restore' }
+        })
+        Sentry.logger.debug('Window maximize toggled', {
+          context: {
+            windowId: id,
+            windowTitle: window.title,
+            isMaximizing
+          }
+        })
+      }
+
+      return prev.map(w =>
+        w.id === id ? { ...w, isMaximized: !w.isMaximized } : w
+      )
+    })
   }, [])
 
   const restoreWindow = useCallback((id: string) => {

@@ -6,6 +6,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
+import * as Sentry from '@sentry/nextjs'
 
 interface Message {
   id: string
@@ -71,12 +72,27 @@ export function Chat() {
     e.preventDefault()
     if (!input.trim() || isLoading) return
 
+    const messageStartTime = Date.now()
+
     const userMessage: Message = {
       id: crypto.randomUUID(),
       role: 'user',
       content: input.trim(),
       timestamp: new Date()
     }
+
+    // Track user message metrics
+    Sentry.metrics.increment('chat.ui.message_sent', 1)
+    Sentry.metrics.gauge('chat.ui.message_length', input.trim().length)
+    Sentry.metrics.gauge('chat.ui.conversation_size', messages.length + 1)
+
+    Sentry.logger.info('User sent message', {
+      context: {
+        messageLength: input.trim().length,
+        conversationSize: messages.length + 1,
+        messagePreview: input.trim().substring(0, 50)
+      }
+    })
 
     setMessages(prev => [...prev, userMessage])
     setInput('')
@@ -98,8 +114,18 @@ export function Chat() {
       })
 
       if (!response.ok) {
+        Sentry.metrics.increment('chat.ui.api_error', 1, {
+          tags: { status: response.status.toString() }
+        })
+        Sentry.logger.error('Chat API request failed', {
+          context: { status: response.status, statusText: response.statusText }
+        })
         throw new Error('Failed to get response')
       }
+
+      Sentry.logger.debug('Chat API request successful', {
+        context: { status: response.status }
+      })
 
       // Handle SSE streaming response
       const reader = response.body?.getReader()
@@ -110,7 +136,9 @@ export function Chat() {
       const decoder = new TextDecoder()
       let streamingContent = ''
       const streamingMessageId = crypto.randomUUID()
-      
+      let toolsEncountered = new Set<string>()
+      let chunksReceived = 0
+
       // Add a placeholder message for streaming content
       setMessages(prev => [...prev, {
         id: streamingMessageId,
@@ -133,18 +161,27 @@ export function Chat() {
 
             try {
               const parsed = JSON.parse(data)
-              
+
               if (parsed.type === 'text_delta') {
                 // Append streaming text
+                chunksReceived++
                 streamingContent += parsed.text
                 setCurrentTool(null) // Clear tool status when text starts flowing
                 // Update the streaming message
-                setMessages(prev => prev.map(msg => 
-                  msg.id === streamingMessageId 
+                setMessages(prev => prev.map(msg =>
+                  msg.id === streamingMessageId
                     ? { ...msg, content: streamingContent }
                     : msg
                 ))
               } else if (parsed.type === 'tool_start') {
+                toolsEncountered.add(parsed.tool)
+                Sentry.metrics.increment('chat.ui.tool_start', 1, {
+                  tags: { tool: parsed.tool }
+                })
+                Sentry.logger.debug('Tool started in UI', {
+                  context: { toolName: parsed.tool }
+                })
+
                 setCurrentTool({
                   name: parsed.tool,
                   status: 'running'
@@ -155,11 +192,37 @@ export function Chat() {
                   elapsed: parsed.elapsed
                 } : null)
               } else if (parsed.type === 'done') {
+                const responseDuration = (Date.now() - messageStartTime) / 1000
+
+                Sentry.metrics.timing('chat.ui.response_time', responseDuration)
+                Sentry.metrics.gauge('chat.ui.response_length', streamingContent.length)
+                Sentry.metrics.gauge('chat.ui.stream_chunks', chunksReceived)
+                Sentry.metrics.gauge('chat.ui.tools_used', toolsEncountered.size)
+
+                Sentry.logger.info('Chat response completed', {
+                  context: {
+                    responseDuration,
+                    responseLength: streamingContent.length,
+                    chunksReceived,
+                    toolsUsed: Array.from(toolsEncountered),
+                    toolCount: toolsEncountered.size
+                  }
+                })
+
                 setCurrentTool(null)
               } else if (parsed.type === 'error') {
+                Sentry.metrics.increment('chat.ui.response_error', 1)
+                Sentry.logger.error('Error in streaming response', {
+                  context: {
+                    error: parsed.message,
+                    chunksReceived,
+                    partialResponseLength: streamingContent.length
+                  }
+                })
+
                 streamingContent = 'Sorry, I encountered an error processing your request.'
-                setMessages(prev => prev.map(msg => 
-                  msg.id === streamingMessageId 
+                setMessages(prev => prev.map(msg =>
+                  msg.id === streamingMessageId
                     ? { ...msg, content: streamingContent }
                     : msg
                 ))
@@ -176,7 +239,21 @@ export function Chat() {
       if (!streamingContent) {
         setMessages(prev => prev.filter(msg => msg.id !== streamingMessageId))
       }
-    } catch {
+    } catch (error) {
+      const errorDuration = (Date.now() - messageStartTime) / 1000
+
+      Sentry.metrics.increment('chat.ui.error', 1)
+      Sentry.metrics.timing('chat.ui.error_duration', errorDuration)
+
+      Sentry.logger.error('Chat UI error', {
+        context: {
+          error: error instanceof Error ? error.message : 'Unknown error',
+          errorDuration,
+          conversationSize: messages.length
+        },
+        error: error instanceof Error ? error : new Error(String(error))
+      })
+
       const errorMessage: Message = {
         id: crypto.randomUUID(),
         role: 'assistant',
