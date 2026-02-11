@@ -7,6 +7,7 @@ import { DesktopIcon } from './DesktopIcon'
 import { Notepad } from './apps/Notepad'
 import { FolderView, FolderItem } from './apps/FolderView'
 import { Chat } from './apps/Chat'
+import { CompetitiveResearch } from './apps/CompetitiveResearch'
 import { useState, useEffect } from 'react'
 import { sentryMetrics, sentryLogger } from '@/lib/sentry-helpers'
 
@@ -117,6 +118,30 @@ function DesktopContent() {
     })
   }
 
+  const openCompetitiveResearch = () => {
+    sentryMetrics.increment('desktop.icon.opened', 1, {
+      tags: { icon_type: 'competitive-research' }
+    })
+    sentryLogger.info('Competitive Research window opened', {
+      context: { iconId: 'competitive-research' }
+    })
+
+    openWindow({
+      id: 'competitive-research',
+      title: 'Competitive Research',
+      icon: '📊',
+      x: 180,
+      y: 60,
+      width: 650,
+      height: 550,
+      minWidth: 450,
+      minHeight: 400,
+      isMinimized: false,
+      isMaximized: false,
+      content: <CompetitiveResearch />
+    })
+  }
+
   const openAgentsFolder = () => {
     sentryMetrics.increment('desktop.icon.opened', 1, {
       tags: { icon_type: 'agents-folder' }
@@ -125,7 +150,15 @@ function DesktopContent() {
       context: { iconId: 'agents-folder' }
     })
 
-    const agentsFolderItems: FolderItem[] = []
+    const agentsFolderItems: FolderItem[] = [
+      {
+        id: 'competitive-research',
+        name: 'Competitive Research',
+        type: 'app',
+        icon: 'chat',
+        onOpen: openCompetitiveResearch,
+      }
+    ]
 
     openWindow({
       id: 'agents-folder',
