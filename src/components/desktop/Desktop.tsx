@@ -8,7 +8,7 @@ import { Notepad } from './apps/Notepad'
 import { FolderView, FolderItem } from './apps/FolderView'
 import { Chat } from './apps/Chat'
 import { useState, useEffect } from 'react'
-import * as Sentry from '@sentry/nextjs'
+import { sentryMetrics, sentryLogger } from '@/lib/sentry-helpers'
 
 const INSTALL_GUIDE_CONTENT = `# SentryOS Install Guide
 
@@ -61,8 +61,8 @@ function DesktopContent() {
 
   useEffect(() => {
     // Log desktop initialization
-    Sentry.metrics.increment('desktop.loaded', 1)
-    Sentry.logger.info('SentryOS Desktop loaded', {
+    sentryMetrics.increment('desktop.loaded', 1)
+    sentryLogger.info('SentryOS Desktop loaded', {
       context: {
         userAgent: typeof window !== 'undefined' ? window.navigator.userAgent : 'unknown',
         timestamp: new Date().toISOString()
@@ -71,10 +71,10 @@ function DesktopContent() {
   }, [])
 
   const openInstallGuide = () => {
-    Sentry.metrics.increment('desktop.icon.opened', 1, {
+    sentryMetrics.increment('desktop.icon.opened', 1, {
       tags: { icon_type: 'install-guide' }
     })
-    Sentry.logger.info('Install Guide opened', {
+    sentryLogger.info('Install Guide opened', {
       context: { iconId: 'install-guide' }
     })
     openWindow({
@@ -94,10 +94,10 @@ function DesktopContent() {
   }
 
   const openChatWindow = () => {
-    Sentry.metrics.increment('desktop.icon.opened', 1, {
+    sentryMetrics.increment('desktop.icon.opened', 1, {
       tags: { icon_type: 'chat' }
     })
-    Sentry.logger.info('Chat window opened', {
+    sentryLogger.info('Chat window opened', {
       context: { iconId: 'chat' }
     })
 
@@ -118,10 +118,10 @@ function DesktopContent() {
   }
 
   const openAgentsFolder = () => {
-    Sentry.metrics.increment('desktop.icon.opened', 1, {
+    sentryMetrics.increment('desktop.icon.opened', 1, {
       tags: { icon_type: 'agents-folder' }
     })
-    Sentry.logger.info('Agents folder opened', {
+    sentryLogger.info('Agents folder opened', {
       context: { iconId: 'agents-folder' }
     })
 

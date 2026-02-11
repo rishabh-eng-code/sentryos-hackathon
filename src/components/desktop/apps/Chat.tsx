@@ -6,7 +6,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
-import * as Sentry from '@sentry/nextjs'
+import { sentryMetrics, sentryLogger } from '@/lib/sentry-helpers'
 
 interface Message {
   id: string
@@ -82,11 +82,11 @@ export function Chat() {
     }
 
     // Track user message metrics
-    Sentry.metrics.increment('chat.ui.message_sent', 1)
-    Sentry.metrics.gauge('chat.ui.message_length', input.trim().length)
-    Sentry.metrics.gauge('chat.ui.conversation_size', messages.length + 1)
+    sentryMetrics.increment('chat.ui.message_sent', 1)
+    sentryMetrics.gauge('chat.ui.message_length', input.trim().length)
+    sentryMetrics.gauge('chat.ui.conversation_size', messages.length + 1)
 
-    Sentry.logger.info('User sent message', {
+    sentryLogger.info('User sent message', {
       context: {
         messageLength: input.trim().length,
         conversationSize: messages.length + 1,
@@ -114,16 +114,16 @@ export function Chat() {
       })
 
       if (!response.ok) {
-        Sentry.metrics.increment('chat.ui.api_error', 1, {
+        sentryMetrics.increment('chat.ui.api_error', 1, {
           tags: { status: response.status.toString() }
         })
-        Sentry.logger.error('Chat API request failed', {
+        sentryLogger.error('Chat API request failed', {
           context: { status: response.status, statusText: response.statusText }
         })
         throw new Error('Failed to get response')
       }
 
-      Sentry.logger.debug('Chat API request successful', {
+      sentryLogger.debug('Chat API request successful', {
         context: { status: response.status }
       })
 
@@ -175,10 +175,10 @@ export function Chat() {
                 ))
               } else if (parsed.type === 'tool_start') {
                 toolsEncountered.add(parsed.tool)
-                Sentry.metrics.increment('chat.ui.tool_start', 1, {
+                sentryMetrics.increment('chat.ui.tool_start', 1, {
                   tags: { tool: parsed.tool }
                 })
-                Sentry.logger.debug('Tool started in UI', {
+                sentryLogger.debug('Tool started in UI', {
                   context: { toolName: parsed.tool }
                 })
 
@@ -194,12 +194,12 @@ export function Chat() {
               } else if (parsed.type === 'done') {
                 const responseDuration = (Date.now() - messageStartTime) / 1000
 
-                Sentry.metrics.timing('chat.ui.response_time', responseDuration)
-                Sentry.metrics.gauge('chat.ui.response_length', streamingContent.length)
-                Sentry.metrics.gauge('chat.ui.stream_chunks', chunksReceived)
-                Sentry.metrics.gauge('chat.ui.tools_used', toolsEncountered.size)
+                sentryMetrics.timing('chat.ui.response_time', responseDuration)
+                sentryMetrics.gauge('chat.ui.response_length', streamingContent.length)
+                sentryMetrics.gauge('chat.ui.stream_chunks', chunksReceived)
+                sentryMetrics.gauge('chat.ui.tools_used', toolsEncountered.size)
 
-                Sentry.logger.info('Chat response completed', {
+                sentryLogger.info('Chat response completed', {
                   context: {
                     responseDuration,
                     responseLength: streamingContent.length,
@@ -211,8 +211,8 @@ export function Chat() {
 
                 setCurrentTool(null)
               } else if (parsed.type === 'error') {
-                Sentry.metrics.increment('chat.ui.response_error', 1)
-                Sentry.logger.error('Error in streaming response', {
+                sentryMetrics.increment('chat.ui.response_error', 1)
+                sentryLogger.error('Error in streaming response', {
                   context: {
                     error: parsed.message,
                     chunksReceived,
@@ -242,10 +242,10 @@ export function Chat() {
     } catch (error) {
       const errorDuration = (Date.now() - messageStartTime) / 1000
 
-      Sentry.metrics.increment('chat.ui.error', 1)
-      Sentry.metrics.timing('chat.ui.error_duration', errorDuration)
+      sentryMetrics.increment('chat.ui.error', 1)
+      sentryMetrics.timing('chat.ui.error_duration', errorDuration)
 
-      Sentry.logger.error('Chat UI error', {
+      sentryLogger.error('Chat UI error', {
         context: {
           error: error instanceof Error ? error.message : 'Unknown error',
           errorDuration,
